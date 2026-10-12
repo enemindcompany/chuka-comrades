@@ -71,6 +71,7 @@ async function verifiedFirebaseUid(
   }
 }
 
+
 function validProfileInput(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -79,6 +80,7 @@ function validProfileInput(
   }
 
   const data = value as Record<string, unknown>;
+
   const allowed = new Set([
     "display_name",
     "campus",
@@ -94,12 +96,14 @@ function validProfileInput(
   for (const key of ["display_name", "campus", "course"]) {
     const item = data[key];
 
-    if (
-      item !== undefined &&
-      item !== null &&
-      (typeof item !== "string" || item.length > 120)
-    ) {
-      return false;
+    if (item !== undefined && item !== null) {
+      if (
+        typeof item !== "string" ||
+        item.trim().length === 0 ||
+        item.length > 120
+      ) {
+        return false;
+      }
     }
   }
 
@@ -119,12 +123,23 @@ function validProfileInput(
   const avatar = data.avatar_url;
 
   if (avatar !== undefined && avatar !== null) {
-    if (typeof avatar !== "string" || avatar.length > 2048) {
+    if (
+      typeof avatar !== "string" ||
+      avatar.length > 2048 ||
+      avatar.trim().length === 0
+    ) {
       return false;
     }
 
     try {
-      if (new URL(avatar).protocol !== "https:") return false;
+      const parsedAvatar = new URL(avatar);
+
+      if (
+        parsedAvatar.protocol !== "https:" ||
+        !parsedAvatar.hostname
+      ) {
+        return false;
+      }
     } catch {
       return false;
     }
@@ -132,6 +147,7 @@ function validProfileInput(
 
   return true;
 }
+
 
 Deno.serve(async (request: Request) => {
   const origin = request.headers.get("Origin");

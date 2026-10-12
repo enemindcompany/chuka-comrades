@@ -81,6 +81,14 @@ function validProfileInput(
 
   const data = value as Record<string, unknown>;
 
+  if (
+    data.campus !== undefined &&
+    data.campus !== null &&
+    data.campus !== "Chuka Campus"
+  ) {
+    return false;
+  }
+
   const allowed = new Set([
     "display_name",
     "campus",
@@ -209,10 +217,23 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ profile: data }, 200, origin);
   }
 
+  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+
+  if (contentLength > 16 * 1024) {
+    return jsonResponse({ error: "Request body too large" }, 413, origin);
+  }
+
   let body: unknown;
+  let rawBody: string;
 
   try {
-    body = await request.json();
+    rawBody = await request.text();
+
+    if (new TextEncoder().encode(rawBody).byteLength > 16 * 1024) {
+      return jsonResponse({ error: "Request body too large" }, 413, origin);
+    }
+
+    body = JSON.parse(rawBody);
   } catch {
     return jsonResponse(
       { error: "Request body must be valid JSON" },

@@ -37,7 +37,17 @@ function App() {
     setBusy(true);
 
     try {
-      await signInWithPopup(auth, googleProvider);
+      const credential = await signInWithPopup(auth, googleProvider);
+      // Temporary diagnostic: report claim presence only; never log the ID token.
+      const tokenResult = await credential.user.getIdTokenResult();
+      console.info("Firebase/Supabase auth diagnostic", {
+        roleClaimPresent: Object.prototype.hasOwnProperty.call(
+          tokenResult.claims,
+          "role",
+        ),
+        authenticatedRoleClaimPresent:
+          tokenResult.claims.role === "authenticated",
+      });
     } catch (err) {
       const code =
         typeof err === "object" && err !== null && "code" in err

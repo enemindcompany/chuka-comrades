@@ -11,6 +11,7 @@ export interface StudentProfile {
   course: string | null;
   year_of_study: number | null;
   avatar_url: string | null;
+  whatsapp_number: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ export interface StudentProfileInput {
   course?: string | null;
   year_of_study?: number | null;
   avatar_url?: string | null;
+  whatsapp_number?: string | null;
 }
 
 interface ProfileResponse<T> {
@@ -32,13 +34,11 @@ async function request<T>(
   body?: StudentProfileInput,
 ): Promise<T> {
   const user = auth.currentUser;
-
   if (!user) {
     throw new Error("Please sign in before accessing your profile.");
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
   if (!supabaseUrl) {
     throw new Error("The profile API URL is not configured.");
   }
@@ -55,9 +55,10 @@ async function request<T>(
 
   if (!response.ok) {
     if (response.status === 401) {
-      throw new Error("Your session could not be verified. Please sign in again.");
+      throw new Error(
+        "Your session could not be verified. Please sign in again.",
+      );
     }
-
     throw new Error(`Profile request failed (HTTP ${response.status}).`);
   }
 

@@ -7,8 +7,7 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const allowedOrigins = new Set(
-  (Deno.env.get("FRONTEND_ORIGINS") ??
-    "http://localhost:5173")
+  (Deno.env.get("FRONTEND_ORIGINS") ?? "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
@@ -24,7 +23,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Headers": "authorization, apikey, content-type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Vary": "Origin",
+    Vary: "Origin",
     "Content-Type": "application/json",
   };
 
@@ -71,7 +70,6 @@ async function verifiedFirebaseUid(
   }
 }
 
-
 function validProfileInput(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -95,6 +93,7 @@ function validProfileInput(
     "course",
     "year_of_study",
     "avatar_url",
+    "whatsapp_number",
   ]);
 
   if (Object.keys(data).some((key) => !allowed.has(key))) {
@@ -128,6 +127,20 @@ function validProfileInput(
     return false;
   }
 
+  const whatsapp = data.whatsapp_number;
+
+  if (whatsapp !== undefined && whatsapp !== null) {
+    if (
+      typeof whatsapp !== "string" ||
+      whatsapp.trim().length === 0 ||
+      whatsapp.length > 30 ||
+      !/^[+0-9\s()-]+$/.test(whatsapp.trim()) ||
+      !/[0-9]/.test(whatsapp)
+    ) {
+      return false;
+    }
+  }
+
   const avatar = data.avatar_url;
 
   if (avatar !== undefined && avatar !== null) {
@@ -155,7 +168,6 @@ function validProfileInput(
 
   return true;
 }
-
 
 Deno.serve(async (request: Request) => {
   const origin = request.headers.get("Origin");
@@ -197,7 +209,7 @@ Deno.serve(async (request: Request) => {
   });
 
   const columns =
-    "id, display_name, university, campus, course, year_of_study, avatar_url, created_at, updated_at";
+    "id, display_name, university, campus, course, year_of_study, avatar_url, whatsapp_number, created_at, updated_at";
 
   if (request.method === "GET") {
     const { data, error } = await supabase
@@ -217,7 +229,9 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ profile: data }, 200, origin);
   }
 
-  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+  const contentLength = Number(
+    request.headers.get("Content-Length") ?? "0",
+  );
 
   if (contentLength > 16 * 1024) {
     return jsonResponse({ error: "Request body too large" }, 413, origin);
@@ -251,7 +265,9 @@ Deno.serve(async (request: Request) => {
   // Read the existing record so omitted fields are preserved.
   const { data: existing, error: readError } = await supabase
     .from("student_profiles")
-    .select("display_name, campus, course, year_of_study, avatar_url")
+    .select(
+      "display_name, campus, course, year_of_study, avatar_url, whatsapp_number",
+    )
     .eq("firebase_uid", uid)
     .maybeSingle();
 
@@ -281,6 +297,9 @@ Deno.serve(async (request: Request) => {
     avatar_url: Object.hasOwn(input, "avatar_url")
       ? input.avatar_url
       : existing?.avatar_url ?? null,
+    whatsapp_number: Object.hasOwn(input, "whatsapp_number")
+      ? input.whatsapp_number
+      : existing?.whatsapp_number ?? null,
     updated_at: new Date().toISOString(),
   };
 
@@ -291,6 +310,9 @@ Deno.serve(async (request: Request) => {
     .single();
 
   if (error) {
+    // Avoid exposing internal database details to the client.
+    console.error("Could not save profile:", error.message);
+
     return jsonResponse(
       { error: "Could not save student profile" },
       500,

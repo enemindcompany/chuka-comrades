@@ -1068,3 +1068,9 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea {
 .danger-button { color: #a52828 !important; border-color: #e4baba !important; }
 @media (max-width: 900px) { .home-preview-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 600px) { .main-navigation { position: static; } .home-preview-grid { grid-template-columns: 1fr; } .home-preview-image { height: 190px; } .landlord-portal-entry, .efootball-brand-hero { align-items: flex-start; flex-direction: column; } .request-activation-form { grid-template-columns: 1fr; } .request-activation-form .form-field:nth-child(2) { grid-column: auto; } .request-history-item { flex-direction: column; } .image-lightbox { padding: 12px; } }
+
+
+/* Community request image attachments */
+.request-attachment-image { display: block; width: min(100%, 420px); max-height: 300px; object-fit: cover; margin: 12px 0; border: 1px solid var(--cc-border); border-radius: 14px; }
+.request-home-card .request-attachment-image { width: 100%; max-height: 220px; margin: 0; border: 0; border-radius: 14px 14px 0 0; }
+.request-home-card .home-preview-copy { padding: 16px; }

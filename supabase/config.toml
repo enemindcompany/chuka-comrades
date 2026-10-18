@@ -437,3 +437,8 @@ verify_jwt = false
 [functions.opportunity-api]
 # This function validates Firebase ID tokens itself; deploy with --no-verify-jwt.
 verify_jwt = false
+
+
+[functions.community-api]
+# This function validates Firebase ID tokens itself; deploy with --no-verify-jwt.
+verify_jwt = false

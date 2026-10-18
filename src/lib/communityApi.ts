@@ -30,11 +30,31 @@ export async function createEfootballTournament(input:{title:string;details:stri
 export async function getPendingCommunityPayments(){const user=auth.currentUser;if(!user)throw new Error("Sign in first.");const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"");const res=await fetch(`${base()}?resource=admin-community`,{headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key}});const data=await res.json().catch(()=>({})) as {error?:string;hookups?:HookupSubscription[];players?:EfootballPlayer[];requests?:PaidRequestPayment[]};if(!res.ok)throw new Error(data.error||"Could not load community payment requests.");return {hookups:data.hookups??[],players:data.players??[],requests:data.requests??[]};}
 export async function reviewCommunityPayment(kind:"hookup"|"efootball"|"request",id:string,decision:"approved"|"rejected",firebase_uid?:string){const user=auth.currentUser;if(!user)throw new Error("Sign in first.");const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"");const resource=kind==="hookup"?"hookup":"admin-community";const body=kind==="hookup"?{action:"review-payment",firebase_uid,decision}:kind==="request"?{action:"review-request",id,decision}:{action:"review-efootball",id,decision};const res=await fetch(`${base()}?resource=${resource}`,{method:"POST",headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key,"Content-Type":"application/json"},body:JSON.stringify(body)});const data=await res.json().catch(()=>({})) as {error?:string};if(!res.ok)throw new Error(data.error||"Could not review payment.");}
 
-export interface PaidRequestPayment { id: string; firebase_uid: string; email: string; request_type: "general" | "roommate_finder"; amount_ksh: number; request_title: string | null; request_details: string | null; payment_reference: string; status: "pending" | "approved" | "rejected"; created_at: string; reviewed_at: string | null; used_at: string | null; }
+export interface PaidRequestPayment { id: string; firebase_uid: string; email: string; request_type: "general" | "roommate_finder"; amount_ksh: number; request_title: string | null; request_details: string | null; image_url?: string | null; payment_reference: string; status: "pending" | "approved" | "rejected"; created_at: string; reviewed_at: string | null; used_at: string | null; }
 export async function getPaidRequestPayments() {
- const user=auth.currentUser;if(!user)throw new Error("Sign in first.");const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"");const res=await fetch(`${base()}?resource=paid-requests`,{headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key}});const data=await res.json().catch(()=>({})) as {error?:string;requests?:PaidRequestPayment[];publicRequests?:PaidRequestPayment[]};if(!res.ok)throw new Error(data.error||"Could not load request payments.");return {requests:data.requests??[],publicRequests:data.publicRequests??[]};
+ const user=auth.currentUser;
+ if(!user)throw new Error("Sign in first.");
+ const supabaseUrl=String(import.meta.env.VITE_SUPABASE_URL??"").trim().replace(/\/+$/,"");
+ const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"").trim();
+ if(!supabaseUrl||!key)throw new Error("Request board is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.");
+ let res:Response;
+ try { res=await fetch(`${supabaseUrl}/functions/v1/community-api?resource=paid-requests`,{headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key}}); }
+ catch { throw new Error("Could not connect to community-api. Check the Supabase URL, FRONTEND_ORIGINS and that community-api has been deployed."); }
+ const data=await res.json().catch(()=>({})) as {error?:string;requests?:PaidRequestPayment[];publicRequests?:PaidRequestPayment[]};
+ if(!res.ok)throw new Error(data.error||`Could not load requests (HTTP ${res.status}).`);
+ return {requests:data.requests??[],publicRequests:data.publicRequests??[]};
 }
-export async function submitPaidRequestPayment(input:{request_type:"general"|"roommate_finder";payment_reference:string;request_title?:string;request_details?:string}) {
- const user=auth.currentUser;if(!user)throw new Error("Sign in first.");const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"");const res=await fetch(`${base()}?resource=paid-requests`,{method:"POST",headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key,"Content-Type":"application/json"},body:JSON.stringify({action:"submit-payment",...input})});const data=await res.json().catch(()=>({})) as {error?:string;request?:PaidRequestPayment};if(!res.ok)throw new Error(data.error||"Could not submit request payment.");return data.request!;
+export async function submitPaidRequestPayment(input:{request_type:"general"|"roommate_finder";payment_reference:string;request_title?:string;request_details?:string;image_base64?:string;image_type?:string}) {
+ const user=auth.currentUser;
+ if(!user)throw new Error("Sign in first.");
+ const supabaseUrl=String(import.meta.env.VITE_SUPABASE_URL??"").trim().replace(/\/+$/,"");
+ const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"").trim();
+ if(!supabaseUrl||!key)throw new Error("Request board is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.");
+ let res:Response;
+ try { res=await fetch(`${supabaseUrl}/functions/v1/community-api?resource=paid-requests`,{method:"POST",headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key,"Content-Type":"application/json"},body:JSON.stringify({action:"submit-payment",...input})}); }
+ catch { throw new Error("Could not connect to community-api. Check the Supabase URL, FRONTEND_ORIGINS and that community-api has been deployed."); }
+ const data=await res.json().catch(()=>({})) as {error?:string;request?:PaidRequestPayment};
+ if(!res.ok)throw new Error(data.error||`Could not submit request payment (HTTP ${res.status}).`);
+ return data.request!;
 }
 export async function reviewPaidRequestPayment(id:string,decision:"approved"|"rejected") { const user=auth.currentUser;if(!user)throw new Error("Sign in first.");const key=String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY??"");const res=await fetch(`${base()}?resource=admin-community`,{method:"POST",headers:{Authorization:`Bearer ${await user.getIdToken()}`,apikey:key,"Content-Type":"application/json"},body:JSON.stringify({action:"review-request",id,decision})});const data=await res.json().catch(()=>({})) as {error?:string};if(!res.ok)throw new Error(data.error||"Could not review request payment.");}

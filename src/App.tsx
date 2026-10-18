@@ -21,6 +21,7 @@ import Opportunities from "./components/Opportunities";
 import MarketplaceSubscription from "./components/MarketplaceSubscription";
 import BillingAdmin from "./components/BillingAdmin";
 import RequestActivation from "./components/RequestActivation";
+import RoommateFinder from "./components/RoommateFinder";
 import {
   createMarketplaceListing,
   deleteMarketplaceListing,
@@ -37,7 +38,7 @@ import {
   type MarketplaceStatus,
 } from "./lib/marketplaceApi";
 import { getOpportunities } from "./lib/opportunityApi";
-import { getEfootballData, type EfootballPlayer, type EfootballTournament } from "./lib/communityApi";
+import { getEfootballData, getPaidRequestPayments, type PaidRequestPayment, type EfootballPlayer, type EfootballTournament } from "./lib/communityApi";
 import { getHostelListings, type HostelListing } from "./lib/hostelApi";
 import type { Opportunity } from "./lib/opportunityApi";
 
@@ -46,6 +47,8 @@ type Page =
   | "marketplace"
   | "store"
   | "hostels"
+  | "my-hostel"
+  | "roommates"
   | "requests"
   | "anonymous"
   | "efootball"
@@ -58,7 +61,9 @@ const navigation: { id: Page; label: string; icon: string }[] = [
   { id: "home", label: "Home", icon: "🏠" },
   { id: "marketplace", label: "Marketplace", icon: "🛍️" },
   { id: "store", label: "My Store", icon: "🏪" },
-  { id: "hostels", label: "Hostels & Roommates", icon: "🏘️" },
+  { id: "hostels", label: "Hostels & rooms", icon: "🏘️" },
+  { id: "my-hostel", label: "My Hostel (Landlords)", icon: "🔑" },
+  { id: "roommates", label: "Find Roommate", icon: "🤝" },
   { id: "requests", label: "Requests · KSh 10", icon: "📝" },
   { id: "anonymous", label: "Hookup", icon: "💗" },
   { id: "efootball", label: "eFootball", icon: "⚽" },
@@ -157,6 +162,7 @@ function App() {
   const [homeHostels, setHomeHostels] = useState<HostelListing[]>([]);
   const [homeOpportunities, setHomeOpportunities] = useState<Opportunity[]>([]);
   const [homePlayers, setHomePlayers] = useState<EfootballPlayer[]>([]);
+  const [homeRequests, setHomeRequests] = useState<PaidRequestPayment[]>([]);
   const [homeTournaments, setHomeTournaments] = useState<EfootballTournament[]>([]);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL;
@@ -240,7 +246,8 @@ function App() {
       getEfootballData().catch(() => null),
       getOpportunities().catch(() => ({ opportunities: [], has_access: false })),
       getHostelListings().catch(() => [] as HostelListing[]),
-    ]).then(([listings, efootball, opportunityResponse, hostels]) => {
+      getPaidRequestPayments().catch(() => ({ requests: [], publicRequests: [] })),
+    ]).then(([listings, efootball, opportunityResponse, hostels, requestResponse]) => {
       if (cancelled) return;
 
       const available = listings.filter(
@@ -250,6 +257,7 @@ function App() {
       setMarketplaceListings(available);
       setHomeOpportunities(opportunityItems);
       setHomeHostels(hostels.filter((item) => item.is_available && item.listing_status === "available").slice(0, 4));
+      setHomeRequests(requestResponse.publicRequests.slice(0, 4));
       setHomePlayers(efootball?.players.slice(0, 4) ?? []);
       setHomeTournaments(efootball ? [...efootball.tournaments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 4) : []);
 
@@ -628,12 +636,7 @@ function App() {
 
           <div className="trends-grid">
             {trends.map((trend) => (
-              <button
-                className="trend-card"
-                key={trend.title}
-                type="button"
-                onClick={() => navigateTo(trend.page)}
-              >
+              <article className="trend-card" key={trend.title}>
                 <span className="trend-icon" aria-hidden="true">
                   {trend.icon}
                 </span>
@@ -641,27 +644,31 @@ function App() {
                 <span className="trend-description">
                   {trendHighlights[trend.page] ?? trend.description}
                 </span>
-                <span className="trend-link">Explore section →</span>
-              </button>
+              </article>
             ))}
           </div>
         </section>
 
         <section className="home-discovery-section">
-          <div className="section-heading"><div><span className="eyebrow">FRESH ON CAMPUS</span><h2>New products & services</h2><p>Recently added listings from your community.</p></div><button className="button button-outline" onClick={() => navigateTo("marketplace")}>Browse marketplace →</button></div>
+          <div className="section-heading"><div><span className="eyebrow">FRESH ON CAMPUS</span><h2>New products & services</h2><p>Recently added listings from your community.</p></div></div>
           {marketplaceListings.filter((item) => item.status === "available" && !item.admin_suspended).length === 0 ? <p className="home-empty-note">New marketplace listings will appear here.</p> : <div className="home-preview-grid">{marketplaceListings.filter((item) => item.status === "available" && !item.admin_suspended).slice(0, 4).map((item) => <article className="home-preview-card" key={item.id}>{item.image_urls?.[0] ? <button className="home-preview-image" onClick={() => setExpandedImage(item.image_urls[0]!)} aria-label={`View ${item.title} image`}><img src={item.image_urls[0]} alt={item.title} loading="lazy" /></button> : <div className="home-preview-image home-preview-placeholder">🛍️</div>}<div className="home-preview-copy"><span>{item.category}</span><h3>{item.title}</h3><strong>{item.price_ksh > 0 ? `KSh ${item.price_ksh.toLocaleString()}` : "Contact for price"}</strong></div></article>)}</div>}
         </section>
         <section className="home-discovery-section">
-          <div className="section-heading"><div><span className="eyebrow">STUDENT ACCOMMODATION</span><h2>New hostels</h2><p>Explore currently available rooms near campus.</p></div><button className="button button-outline" onClick={() => navigateTo("hostels")}>Find a hostel →</button></div>
+          <div className="section-heading"><div><span className="eyebrow">STUDENT ACCOMMODATION</span><h2>New hostels</h2><p>Explore currently available rooms near campus.</p></div></div>
           {homeHostels.length === 0 ? <p className="home-empty-note">Available hostel listings will appear here when landlords publish them.</p> : <div className="home-preview-grid">{homeHostels.slice(0,4).map((item) => <article className="home-preview-card" key={item.id}>{item.image_url ? <button className="home-preview-image" onClick={() => setExpandedImage(item.image_url!)} aria-label={`View ${item.name} image`}><img src={item.image_url} alt={item.name} loading="lazy" /></button> : <div className="home-preview-image home-preview-placeholder">🏘️</div>}<div className="home-preview-copy"><span>{item.area}</span><h3>{item.name}</h3><strong>KSh {item.rent_ksh.toLocaleString()} / month</strong></div></article>)}</div>}
         </section>
         <section className="home-discovery-section">
-          <div className="section-heading"><div><span className="eyebrow">GROW YOUR NEXT MOVE</span><h2>Latest opportunities</h2><p>Jobs, scholarships, referrals and learning resources.</p></div><button className="button button-outline" onClick={() => navigateTo("opportunities")}>Explore opportunities →</button></div>
+          <div className="section-heading"><div><span className="eyebrow">GROW YOUR NEXT MOVE</span><h2>Latest opportunities</h2><p>Jobs, scholarships, referrals and learning resources.</p></div></div>
           {homeOpportunities.length === 0 ? <p className="home-empty-note">New opportunities will show here when available to your account.</p> : <div className="home-preview-grid">{homeOpportunities.slice(0,4).map((item) => <article className="home-preview-card home-text-preview" key={item.id}><div className="home-preview-copy"><span>{item.category}</span><h3>{item.title}</h3><p>{item.description}</p></div></article>)}</div>}
         </section>
         <section className="home-discovery-section">
-          <div className="section-heading"><div><span className="eyebrow">GAME ON</span><h2>eFootball tournaments & players</h2><p>Discover community players and upcoming tournaments.</p></div><button className="button button-outline" onClick={() => navigateTo("efootball")}>Open eFootball →</button></div>
+          <div className="section-heading"><div><span className="eyebrow">GAME ON</span><h2>eFootball tournaments & players</h2><p>Discover community players and upcoming tournaments.</p></div></div>
           {homeTournaments.length === 0 && homePlayers.length === 0 ? <p className="home-empty-note">Player and tournament highlights will appear here when available to your account.</p> : <div className="home-preview-grid">{homeTournaments.slice(0,2).map((item) => <article className="home-preview-card home-text-preview" key={item.id}><div className="home-preview-copy"><span>TOURNAMENT</span><h3>{item.title}</h3><p>{item.event_date || "Date to be announced"}</p></div></article>)}{homePlayers.slice(0,2).map((item) => <article className="home-preview-card" key={item.id}>{item.squad_image_url ? <button className="home-preview-image" onClick={() => setExpandedImage(item.squad_image_url)} aria-label={`View ${item.player_name} squad image`}><img src={item.squad_image_url} alt={`${item.player_name} squad`} loading="lazy" /></button> : <div className="home-preview-image home-preview-placeholder">⚽</div>}<div className="home-preview-copy"><span>PLAYER</span><h3>{item.player_name}</h3><p>{item.bio || "Community eFootball player"}</p></div></article>)}</div>}
+        </section>
+
+        <section className="home-discovery-section">
+          <div className="section-heading"><div><span className="eyebrow">COMMUNITY REQUEST BOARD</span><h2>Requests from comrades 📝</h2><p>Requests approved by the administrator after payment verification.</p></div></div>
+          {homeRequests.length === 0 ? <p className="home-empty-note">No activated community requests have been published yet.</p> : <div className="home-preview-grid">{homeRequests.map((item) => <article className="home-preview-card home-text-preview request-home-card" key={item.id}>{item.image_url && <img className="request-attachment-image" src={item.image_url} alt={`Image attached to ${item.request_title ?? "community request"}`} loading="lazy" />}<div className="home-preview-copy"><span>{new Date(item.created_at).toLocaleDateString()}</span><h3>{item.request_title}</h3><p>{item.request_details}</p></div></article>)}</div>}
         </section>
 
         <section className="community-banner">
@@ -673,34 +680,10 @@ function App() {
               what's available in the community.
             </p>
           </div>
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={() => navigateTo("anonymous")}
-          >
-            Explore Hookup
-          </button>
+
         </section>
 
-        <section className="home-quick-links">
-          <h2>Quick access</h2>
-          <div className="quick-link-list">
-            {navigation
-              .filter((item) => item.id !== "home")
-              .map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="quick-link"
-                  onClick={() => navigateTo(item.id)}
-                >
-                  <span aria-hidden="true">{item.icon}</span>
-                  <span>{item.label}</span>
-                  <span aria-hidden="true">→</span>
-                </button>
-              ))}
-          </div>
-        </section>
+
       </>
     );
   }
@@ -1059,7 +1042,9 @@ function App() {
                   <>
                     {page === "home" && renderHome()}
                     {(page === "marketplace" || page === "store") && renderMarketplace()}
-                    {page === "hostels" && <Hostels />}
+                    {page === "hostels" && <Hostels mode="browse" />}
+                    {page === "my-hostel" && <Hostels mode="manage" />}
+                    {page === "roommates" && <RoommateFinder />}
                     {page === "requests" && <RequestActivation />}
                     {page === "anonymous" && <AnonymousCommunity />}
                     {page === "premier-league" && <PremierLeague />}

@@ -89,7 +89,7 @@ function toPayload(draft: HostelDraft) {
   };
 }
 
-export default function Hostels() {
+export default function Hostels({ mode = "browse" }: { mode?: "browse" | "manage" }) {
   const [listings, setListings] = useState<HostelListing[]>([]);
   const [manager, setManager] = useState<HostelManager | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,7 +103,7 @@ export default function Hostels() {
   const [draft, setDraft] = useState<HostelDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [landlordPortalOpen, setLandlordPortalOpen] = useState(false);
+  const [landlordPortalOpen, setLandlordPortalOpen] = useState(mode === "manage");
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [uploadingImages, setUploadingImages] = useState(false);
 
@@ -239,21 +239,20 @@ export default function Hostels() {
   return (
     <section className="hostels-page">
       <div className="homepage-heading">
-        <span className="eyebrow">CHUKA CAMPUS ACCOMMODATION</span>
-        <h1>Hostels & rooms 🏘️</h1>
-        <p>Browse room listings near Chuka University, view details and photos, then contact the landlord directly on WhatsApp. Chuka Comrades does not process online payments.</p>
+        <span className="eyebrow">{mode === "manage" ? "LANDLORD WORKSPACE" : "CHUKA CAMPUS ACCOMMODATION"}</span>
+        <h1>{mode === "manage" ? "My Hostel 🏘️" : "Hostels & rooms 🏘️"}</h1>
+        <p>{mode === "manage" ? "Register as a landlord, publish rooms and manage your own hostel listings from this private workspace." : "Browse room listings near Chuka University, view details and photos, then contact the landlord directly on WhatsApp. Chuka Comrades does not process online payments."}</p>
       </div>
 
       {error && <p className="error-message" role="alert">{error}</p>}
       {notice && <p className="success-message" role="status">{notice}</p>}
 
-      <div className="hostel-marketplace-notice" role="note">
+      {mode === "browse" && <div className="hostel-marketplace-notice" role="note">
         <strong>View listings and contact landlords directly — no in-app payments.</strong>
         <span>Use WhatsApp to ask questions and arrange a viewing. Verify the property and landlord in person before sending money; Chuka Comrades does not process or guarantee payments made outside the app.</span>
-      </div>
+      </div>}
 
-      <section className="landlord-portal-entry"><div><span className="eyebrow">LANDLORDS & PROPERTY OWNERS</span><h2>Manage your accommodation</h2><p>Register or sign in to your landlord account to publish and manage your own hostel details. Your management form stays tucked away while students browse available rooms.</p></div><button className="button button-primary" type="button" onClick={() => setLandlordPortalOpen((open) => !open)}>{landlordPortalOpen ? "Close landlord portal" : manager?.status === "approved" ? "Open landlord portal" : "Landlord / List your hostel"}</button></section>
-      {landlordPortalOpen && <section className="hostel-manager-panel">
+      {(mode === "manage" || landlordPortalOpen) && <section className="hostel-manager-panel">
         {manager && manager.status === "approved" ? (
           <div className="hostel-manager-ready">
             <div>
@@ -298,7 +297,7 @@ export default function Hostels() {
         )}
       </section>}
 
-      {landlordPortalOpen && showForm && manager && (
+      {(mode === "manage" || landlordPortalOpen) && showForm && manager && (
         <section className="hostel-editor">
           <div className="section-heading">
             <div>
@@ -367,9 +366,7 @@ export default function Hostels() {
         </section>
       )}
 
-      <RoommateFinder />
-
-      <section className="hostel-browse-section">
+      {mode === "browse" && <section className="hostel-browse-section">
         <div className="section-heading">
           <div>
             <span className="eyebrow">ROOMS AROUND CHUKA</span>
@@ -415,7 +412,8 @@ export default function Hostels() {
         )}
       </section>
 
-      {landlordPortalOpen && manager && <section className="hostel-my-listings">
+      }
+      {(mode === "manage" || landlordPortalOpen) && manager && <section className="hostel-my-listings">
         <div className="section-heading"><div><span className="eyebrow">YOUR PROPERTIES</span><h2>My rooms ({myListings.length})</h2></div></div>
         <p className="small-note">You can edit your room details and WhatsApp number at any time. Set rooms to Available, Booked, or Closed. Closed rooms are hidden from public browsing but remain editable here. No payments are collected through this marketplace.</p>
         {myListings.length > 0 && <div className="hostel-my-listings-list">{myListings.map((listing) => <div key={listing.id}><span><strong>{listing.name}</strong><small>{listing.area} · KSh {listing.rent_ksh.toLocaleString()}/month</small></span><button className="button button-outline" type="button" onClick={() => startEdit(listing)}>Edit / availability</button></div>)}</div>}

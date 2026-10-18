@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+﻿import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { createEfootballTournament, getEfootballData, registerEfootballPlayer, type EfootballPlayer, type EfootballTournament } from "../lib/communityApi";
 
-const mpesaTill = String(import.meta.env.VITE_MPESA_TILL ?? "").trim();
+const mpesaTill = String(import.meta.env.VITE_MPESA_TILL ?? "").trim() || "6817863";
 const mpesaPaybill = String(import.meta.env.VITE_MPESA_PAYBILL ?? "").trim();
 const mpesaAccount = String(import.meta.env.VITE_MPESA_ACCOUNT ?? "").trim();
 function whatsappDigits(phone: string) {
@@ -79,18 +79,18 @@ export default function Efootball() {
   }
 
   return <section className="feature-page">
-    <div className="homepage-heading"><span className="eyebrow">PLAYER DIRECTORY & TOURNAMENTS</span><h1>Chuka eFootball ⚽</h1><p>List your eFootball name and squad image, find opponents, share tournament numbers, and organize campus tournaments.</p></div>
+    <div className="homepage-heading"><span className="eyebrow">PLAYER DIRECTORY & TOURNAMENTS</span><h1>Chuka eFootball âš½</h1><p>List your eFootball name and squad image, find opponents, share tournament numbers, and organize campus tournaments.</p></div>
     {error && <p className="error-message" role="alert">{error}</p>}{notice && <p className="success-message" role="status">{notice}</p>}
     {!hasAccess && <section className="activation-card"><div><span className="eyebrow">ONE-TIME PLAYER LISTING</span><h2>KSh 20 listing fee</h2><p>{own?.payment_status === "pending" ? "Your listing payment is waiting for admin verification." : own?.payment_status === "rejected" ? "Your previous payment was rejected. Check the transaction code and resubmit." : "Pay KSh 20 once. After admin approval, your player name, squad image and WhatsApp contact will be listed, and you can access the player directory and tournament tools."}</p>{own?.payment_status === "pending" && <span className="status-pill status-pending">Payment under review</span>}</div>
       {own?.payment_status !== "pending" && <form className="activation-payment-form" onSubmit={e => void register(e)}>
         <label className="form-field"><span>eFootball player name *</span><input required minLength={2} maxLength={60} value={name} onChange={e => setName(e.target.value)} placeholder="Your in-game name" /></label>
         <label className="form-field"><span>WhatsApp number *</span><input required type="tel" minLength={9} maxLength={20} pattern="[+0-9() -]+" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="0712 345 678" /></label>
         <label className="form-field"><span>Squad image *</span><input required type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} /><small className="small-note">JPG, PNG or WEBP; maximum 5 MB.</small></label>
-        <label className="form-field"><span>Short bio (optional)</span><textarea rows={2} maxLength={400} value={bio} onChange={e => setBio(e.target.value)} placeholder="Play style, console, preferred match times…" /></label>
+        <label className="form-field"><span>Short bio (optional)</span><textarea rows={2} maxLength={400} value={bio} onChange={e => setBio(e.target.value)} placeholder="Play style, console, preferred match timesâ€¦" /></label>
         <label className="form-field"><span>M-Pesa transaction code *</span><input required minLength={4} maxLength={80} value={reference} onChange={e => setReference(e.target.value.toUpperCase())} placeholder="e.g. QWE123ABC" /></label>
         <p className="small-note">Submit the KSh 20 M-Pesa reference for manual admin verification. No listing appears until approved.</p>
-        {(mpesaTill || mpesaPaybill) && <p className="payment-instructions">{mpesaTill ? `M-Pesa Buy Goods Till: ${mpesaTill}` : `M-Pesa Paybill: ${mpesaPaybill}`}{mpesaPaybill && mpesaAccount ? ` · Account: ${mpesaAccount}` : ""}</p>}
-        <button className="button button-primary" disabled={saving}>{saving ? "Submitting…" : "Submit KSh 20 listing"}</button>
+        {(mpesaTill || mpesaPaybill) && <p className="payment-instructions">{mpesaTill ? `M-Pesa Buy Goods Till: ${mpesaTill}` : `M-Pesa Paybill: ${mpesaPaybill}`}{mpesaPaybill && mpesaAccount ? ` Â· Account: ${mpesaAccount}` : ""}</p>}
+        <button className="button button-primary" disabled={saving}>{saving ? "Submittingâ€¦" : "Submit KSh 20 listing"}</button>
       </form>}</section>}
     {hasAccess && <>
       <div className="opportunities-toolbar"><h2>Registered players ({players.length})</h2><button className="button button-primary" onClick={() => setTournamentForm(v => !v)}>{tournamentForm ? "Cancel" : "+ Organize tournament"}</button></div>
@@ -101,19 +101,20 @@ export default function Efootball() {
         <label className="form-field"><span>eFootball tournament / room number *</span><input required minLength={2} maxLength={80} value={tournamentNumber} onChange={e => setTournamentNumber(e.target.value)} placeholder="Enter the tournament number players should use" /></label>
         <label className="form-field"><span>Date (optional)</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <label className="form-field"><span>Contact for joining *</span><input required minLength={3} maxLength={150} value={contact} onChange={e => setContact(e.target.value)} placeholder="WhatsApp number or link" /></label>
-        <button className="button button-primary" disabled={saving}>{saving ? "Publishing…" : "Publish tournament"}</button>
+        <button className="button button-primary" disabled={saving}>{saving ? "Publishingâ€¦" : "Publish tournament"}</button>
       </form>}
       <div className="feature-grid">{players.map(p => <article className="feature-card" key={p.id}>
         <img src={p.squad_image_url} alt={`${p.player_name} squad`} style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 12 }} />
         <h2>{p.player_name}</h2><p>{p.bio || "Ready to find an opponent."}</p><p className="small-note">WhatsApp: {p.whatsapp_number}</p>
-        <a className="button button-outline" href={`https://wa.me/${whatsappDigits(p.whatsapp_number)}?text=${encodeURIComponent(`Hi ${p.player_name}, I found your eFootball listing on Chuka Comrades. Want to play a match?`)}`} target="_blank" rel="noreferrer">Challenge on WhatsApp ↗</a>
+        <a className="button button-outline" href={`https://wa.me/${whatsappDigits(p.whatsapp_number)}?text=${encodeURIComponent(`Hi ${p.player_name}, I found your eFootball listing on Chuka Comrades. Want to play a match?`)}`} target="_blank" rel="noreferrer">Challenge on WhatsApp â†—</a>
       </article>)}</div>
       <div className="opportunity-list-heading"><h2>Community tournaments</h2><span>{tournaments.length} listed</span></div>
       {tournaments.length === 0 ? <p className="small-note">No tournaments listed yet. Organize the first one.</p> : <div className="opportunity-grid">{tournaments.map(t => <article className="opportunity-card" key={t.id}>
-        <h3>{t.title}</h3><p>{t.details}</p><p><strong>Tournament number:</strong> {t.tournament_number}</p><p className="small-note">Organizer: {t.organizer_name}{t.event_date ? ` · ${t.event_date}` : ""}</p><p>Join/contact: {t.contact}</p>
-        <a className="button button-outline" href={`https://wa.me/?text=${encodeURIComponent(`Join ${t.title} on Chuka Comrades eFootball. Tournament number: ${t.tournament_number}. Details: ${t.details}. Contact: ${t.contact}`)}`} target="_blank" rel="noreferrer">Share tournament number ↗</a>
+        <h3>{t.title}</h3><p>{t.details}</p><p><strong>Tournament number:</strong> {t.tournament_number}</p><p className="small-note">Organizer: {t.organizer_name}{t.event_date ? ` Â· ${t.event_date}` : ""}</p><p>Join/contact: {t.contact}</p>
+        <a className="button button-outline" href={`https://wa.me/?text=${encodeURIComponent(`Join ${t.title} on Chuka Comrades eFootball. Tournament number: ${t.tournament_number}. Details: ${t.details}. Contact: ${t.contact}`)}`} target="_blank" rel="noreferrer">Share tournament number â†—</a>
       </article>)}</div>}
     </>}
-    {loading && <p className="loading-card">Loading eFootball data…</p>}
+    {loading && <p className="loading-card">Loading eFootball dataâ€¦</p>}
   </section>;
 }
+

@@ -20,6 +20,7 @@ import Hostels, { HostelManagerAdmin } from "./components/Hostels";
 import Opportunities from "./components/Opportunities";
 import MarketplaceSubscription from "./components/MarketplaceSubscription";
 import BillingAdmin from "./components/BillingAdmin";
+import RequestActivation from "./components/RequestActivation";
 import {
   createMarketplaceListing,
   deleteMarketplaceListing,
@@ -28,6 +29,7 @@ import {
   uploadMarketplaceImage,
   getMarketplaceStore,
   saveMarketplaceStore,
+  deleteMarketplaceStore,
   type MarketplaceStore,
   type MarketplaceStoreDraft,
   type MarketplaceCategory,
@@ -35,12 +37,16 @@ import {
   type MarketplaceStatus,
 } from "./lib/marketplaceApi";
 import { getOpportunities } from "./lib/opportunityApi";
-import { getEfootballData } from "./lib/communityApi";
+import { getEfootballData, type EfootballPlayer, type EfootballTournament } from "./lib/communityApi";
+import { getHostelListings, type HostelListing } from "./lib/hostelApi";
+import type { Opportunity } from "./lib/opportunityApi";
 
 type Page =
   | "home"
   | "marketplace"
+  | "store"
   | "hostels"
+  | "requests"
   | "anonymous"
   | "efootball"
   | "premier-league"
@@ -51,7 +57,9 @@ type Page =
 const navigation: { id: Page; label: string; icon: string }[] = [
   { id: "home", label: "Home", icon: "🏠" },
   { id: "marketplace", label: "Marketplace", icon: "🛍️" },
+  { id: "store", label: "My Store", icon: "🏪" },
   { id: "hostels", label: "Hostels & Roommates", icon: "🏘️" },
+  { id: "requests", label: "Requests · KSh 10", icon: "📝" },
   { id: "anonymous", label: "Hookup", icon: "💗" },
   { id: "efootball", label: "eFootball", icon: "⚽" },
   { id: "opportunities", label: "Opportunities", icon: "🎓" },
@@ -146,6 +154,11 @@ function App() {
   const [marketplaceStoreOpen, setMarketplaceStoreOpen] = useState(false);
   const [marketplaceStoreSaving, setMarketplaceStoreSaving] = useState(false);
   const [trendHighlights, setTrendHighlights] = useState<Record<string, string>>({});
+  const [homeHostels, setHomeHostels] = useState<HostelListing[]>([]);
+  const [homeOpportunities, setHomeOpportunities] = useState<Opportunity[]>([]);
+  const [homePlayers, setHomePlayers] = useState<EfootballPlayer[]>([]);
+  const [homeTournaments, setHomeTournaments] = useState<EfootballTournament[]>([]);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL;
 
   useEffect(() => {
@@ -225,25 +238,28 @@ function App() {
     void Promise.all([
       getMarketplaceListings().catch(() => [] as MarketplaceListing[]),
       getEfootballData().catch(() => null),
-      getOpportunities().catch(() => ({
-        opportunities: [],
-        has_access: false,
-      })),
-    ]).then(([listings, efootball, opportunityResponse]) => {
+      getOpportunities().catch(() => ({ opportunities: [], has_access: false })),
+      getHostelListings().catch(() => [] as HostelListing[]),
+    ]).then(([listings, efootball, opportunityResponse, hostels]) => {
       if (cancelled) return;
 
       const available = listings.filter(
         (item) => item.status === "available" && !item.admin_suspended,
       );
       const opportunityItems = opportunityResponse.opportunities;
+      setMarketplaceListings(available);
+      setHomeOpportunities(opportunityItems);
+      setHomeHostels(hostels.filter((item) => item.is_available && item.listing_status === "available").slice(0, 4));
+      setHomePlayers(efootball?.players.slice(0, 4) ?? []);
+      setHomeTournaments(efootball ? [...efootball.tournaments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 4) : []);
 
       const highlights: Record<string, string> = {
         marketplace: available.length
           ? `${available.length} available listing${available.length === 1 ? "" : "s"} · Latest: ${available[0].title}`
           : "No current listings yet — the marketplace is ready for the community's first listing.",
-        efootball: efootball?.hasAccess
+        efootball: efootball && (efootball.players.length > 0 || efootball.tournaments.length > 0)
           ? `${efootball.players.length} registered players · ${efootball.tournaments.length} tournament${efootball.tournaments.length === 1 ? "" : "s"} listed`
-          : "Player listings and tournament details appear here when available to your account.",
+          : "Player listings and tournament details appear here when available.",
         opportunities: opportunityItems.length
           ? `${opportunityItems.length} shared opportunit${opportunityItems.length === 1 ? "y" : "ies"} · Latest: ${opportunityItems[0].title}`
           : "No shared opportunities yet. Be the first to share one.",
@@ -258,7 +274,7 @@ function App() {
   }, [user, page]);
 
   useEffect(() => {
-    if (!user || page !== "marketplace") return;
+    if (!user || (page !== "marketplace" && page !== "store")) return;
     let active = true;
     setMarketplaceLoading(true);
     setMarketplaceError("");
@@ -431,6 +447,9 @@ function App() {
   }
 
   const filteredMarketplaceListings = marketplaceListings.filter((listing) => {
+    const isMine = listing.created_by === user?.uid;
+    if (page === "store" && !isMine) return false;
+    if (page === "marketplace" && (listing.status !== "available" || listing.admin_suspended)) return false;
     const matchesCategory = category === "All categories" || listing.category === category;
     const haystack = `${listing.title} ${listing.store_name} ${listing.category} ${listing.location} ${listing.description}`.toLowerCase();
     return matchesCategory && haystack.includes(search.toLowerCase());
@@ -444,10 +463,28 @@ function App() {
       location: marketplaceStore?.location ?? emptyMarketplaceDraft.location,
       whatsapp_number: marketplaceStore?.whatsapp_number ?? "",
     });
-    setMarketplaceShowForm(true);
     setMarketplaceError("");
+    if (!marketplaceStore) {
+      setMarketplaceShowForm(false);
+      setMarketplaceStoreOpen(true);
+      setMarketplaceNotice("Create your store profile first, then add your first product or service.");
+      return;
+    }
+    setMarketplaceShowForm(true);
     setMarketplaceNotice("");
-    if (!marketplaceStore) setMarketplaceStoreOpen(true);
+  }
+
+  async function handleMarketplaceStoreDelete() {
+    if (!marketplaceStore) return;
+    if (!window.confirm(`Delete your store “${marketplaceStore.store_name}” and all its product listings? This cannot be undone.`)) return;
+    setMarketplaceError(""); setMarketplaceNotice(""); setMarketplaceStoreSaving(true);
+    try {
+      await deleteMarketplaceStore();
+      setMarketplaceStore(null); setMarketplaceListings((rows) => rows.filter((item) => item.created_by !== user?.uid));
+      setMarketplaceStoreOpen(false); setMarketplaceShowForm(false);
+      setMarketplaceNotice("Your store and its listings have been deleted.");
+    } catch (err) { setMarketplaceError(err instanceof Error ? err.message : "Could not delete your store."); }
+    finally { setMarketplaceStoreSaving(false); }
   }
 
   async function handleMarketplaceStoreSave(event: FormEvent<HTMLFormElement>) {
@@ -610,6 +647,23 @@ function App() {
           </div>
         </section>
 
+        <section className="home-discovery-section">
+          <div className="section-heading"><div><span className="eyebrow">FRESH ON CAMPUS</span><h2>New products & services</h2><p>Recently added listings from your community.</p></div><button className="button button-outline" onClick={() => navigateTo("marketplace")}>Browse marketplace →</button></div>
+          {marketplaceListings.filter((item) => item.status === "available" && !item.admin_suspended).length === 0 ? <p className="home-empty-note">New marketplace listings will appear here.</p> : <div className="home-preview-grid">{marketplaceListings.filter((item) => item.status === "available" && !item.admin_suspended).slice(0, 4).map((item) => <article className="home-preview-card" key={item.id}>{item.image_urls?.[0] ? <button className="home-preview-image" onClick={() => setExpandedImage(item.image_urls[0]!)} aria-label={`View ${item.title} image`}><img src={item.image_urls[0]} alt={item.title} loading="lazy" /></button> : <div className="home-preview-image home-preview-placeholder">🛍️</div>}<div className="home-preview-copy"><span>{item.category}</span><h3>{item.title}</h3><strong>{item.price_ksh > 0 ? `KSh ${item.price_ksh.toLocaleString()}` : "Contact for price"}</strong></div></article>)}</div>}
+        </section>
+        <section className="home-discovery-section">
+          <div className="section-heading"><div><span className="eyebrow">STUDENT ACCOMMODATION</span><h2>New hostels</h2><p>Explore currently available rooms near campus.</p></div><button className="button button-outline" onClick={() => navigateTo("hostels")}>Find a hostel →</button></div>
+          {homeHostels.length === 0 ? <p className="home-empty-note">Available hostel listings will appear here when landlords publish them.</p> : <div className="home-preview-grid">{homeHostels.slice(0,4).map((item) => <article className="home-preview-card" key={item.id}>{item.image_url ? <button className="home-preview-image" onClick={() => setExpandedImage(item.image_url!)} aria-label={`View ${item.name} image`}><img src={item.image_url} alt={item.name} loading="lazy" /></button> : <div className="home-preview-image home-preview-placeholder">🏘️</div>}<div className="home-preview-copy"><span>{item.area}</span><h3>{item.name}</h3><strong>KSh {item.rent_ksh.toLocaleString()} / month</strong></div></article>)}</div>}
+        </section>
+        <section className="home-discovery-section">
+          <div className="section-heading"><div><span className="eyebrow">GROW YOUR NEXT MOVE</span><h2>Latest opportunities</h2><p>Jobs, scholarships, referrals and learning resources.</p></div><button className="button button-outline" onClick={() => navigateTo("opportunities")}>Explore opportunities →</button></div>
+          {homeOpportunities.length === 0 ? <p className="home-empty-note">New opportunities will show here when available to your account.</p> : <div className="home-preview-grid">{homeOpportunities.slice(0,4).map((item) => <article className="home-preview-card home-text-preview" key={item.id}><div className="home-preview-copy"><span>{item.category}</span><h3>{item.title}</h3><p>{item.description}</p></div></article>)}</div>}
+        </section>
+        <section className="home-discovery-section">
+          <div className="section-heading"><div><span className="eyebrow">GAME ON</span><h2>eFootball tournaments & players</h2><p>Discover community players and upcoming tournaments.</p></div><button className="button button-outline" onClick={() => navigateTo("efootball")}>Open eFootball →</button></div>
+          {homeTournaments.length === 0 && homePlayers.length === 0 ? <p className="home-empty-note">Player and tournament highlights will appear here when available to your account.</p> : <div className="home-preview-grid">{homeTournaments.slice(0,2).map((item) => <article className="home-preview-card home-text-preview" key={item.id}><div className="home-preview-copy"><span>TOURNAMENT</span><h3>{item.title}</h3><p>{item.event_date || "Date to be announced"}</p></div></article>)}{homePlayers.slice(0,2).map((item) => <article className="home-preview-card" key={item.id}>{item.squad_image_url ? <button className="home-preview-image" onClick={() => setExpandedImage(item.squad_image_url)} aria-label={`View ${item.player_name} squad image`}><img src={item.squad_image_url} alt={`${item.player_name} squad`} loading="lazy" /></button> : <div className="home-preview-image home-preview-placeholder">⚽</div>}<div className="home-preview-copy"><span>PLAYER</span><h3>{item.player_name}</h3><p>{item.bio || "Community eFootball player"}</p></div></article>)}</div>}
+        </section>
+
         <section className="community-banner">
           <div>
             <span className="eyebrow">ONE COMMUNITY</span>
@@ -655,22 +709,24 @@ function App() {
     return (
       <>
         <section className="homepage-heading">
-          <span className="eyebrow">BUY, SELL & DISCOVER LOCALLY</span>
-          <h1>Campus marketplace 🛍️</h1>
-          <p>Discover items, small businesses and services from fellow comrades around Chuka.</p>
+          <span className="eyebrow">{page === "store" ? "YOUR PRIVATE SELLER WORKSPACE" : "BUY, SELL & DISCOVER LOCALLY"}</span>
+          <h1>{page === "store" ? "My Store 🏪" : "Campus marketplace 🛍️"}</h1>
+          <p>{page === "store" ? "Set up your store, publish products and manage your own listings here. These management tools are not shown to marketplace visitors." : "Discover available items, small businesses and services from fellow comrades around Chuka."}</p>
         </section>
-        <div className="marketplace-safety-note" role="note">
+        {page === "marketplace" && <div className="marketplace-safety-note" role="note">
           <strong>View and contact directly — no online payments.</strong>
           <span>Chuka Comrades does not provide checkout or handle transactions. Contact sellers on WhatsApp, inspect items or services first, and agree safely with the seller directly.</span>
-        </div>
-        <MarketplaceSubscription />
+        </div>}
+        {page === "store" && <MarketplaceSubscription />}
         <section className="marketplace-toolbar profile-editor">
-          <label className="form-field"><span>Search marketplace</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search items, stores or services..." /></label>
-          <label className="form-field"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>All categories</option><option>Books</option><option>Electronics</option><option>Fashion</option><option>Home</option><option>Food</option><option>Services</option><option>Other</option></select></label>
-          <div className="marketplace-toolbar-actions"><button className="button button-outline" type="button" onClick={() => { setMarketplaceStoreOpen((open) => !open); setMarketplaceError(""); }}>{marketplaceStore ? "Manage my store" : "Set up my store"}</button><button className="button button-primary marketplace-add-button" type="button" onClick={startMarketplaceCreate}>+ Add product / service</button></div>
+          {page === "marketplace" ? <>
+            <label className="form-field"><span>Search marketplace</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search items, stores or services..." /></label>
+            <label className="form-field"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>All categories</option><option>Books</option><option>Electronics</option><option>Fashion</option><option>Home</option><option>Food</option><option>Services</option><option>Other</option></select></label>
+            <div className="marketplace-toolbar-actions"><button className="button button-primary" type="button" onClick={() => navigateTo("store")}>Open My Store →</button></div>
+          </> : <div className="marketplace-toolbar-actions"><button className="button button-outline" type="button" onClick={() => { setMarketplaceStoreOpen((open) => !open); setMarketplaceError(""); }}>{marketplaceStore ? "Edit store details" : "Create my store"}</button><button className="button button-primary marketplace-add-button" type="button" onClick={startMarketplaceCreate}>+ Add product / service</button></div>}
         </section>
-        {marketplaceStore && !marketplaceStoreOpen && <section className="marketplace-store-summary"><div><span className="eyebrow">YOUR STORE</span><h2>{marketplaceStore.store_name}</h2><p>{marketplaceStore.seller_name} · {marketplaceStore.business_type} · 📍 {marketplaceStore.location}</p><p>{marketplaceStore.description}</p><small>WhatsApp: {marketplaceStore.whatsapp_number} · {marketplaceStore.delivery_options.join(" / ")}</small></div><button className="button button-outline" type="button" onClick={() => setMarketplaceStoreOpen(true)}>Edit store details</button></section>}
-        {marketplaceStoreOpen && <section className="profile-editor marketplace-listing-editor"><div className="section-heading"><div><span className="eyebrow">SELLER PROFILE</span><h2>{marketplaceStore ? "Manage your store" : "Set up your store"}</h2><p>Save this once. Your store profile stays linked to your account for future visits.</p></div><button className="button button-outline" type="button" onClick={() => setMarketplaceStoreOpen(false)}>Close</button></div><form className="marketplace-form" onSubmit={(event) => void handleMarketplaceStoreSave(event)}>
+        {page === "store" && marketplaceStore && !marketplaceStoreOpen && <section className="marketplace-store-summary"><div><span className="eyebrow">YOUR STORE</span><h2>{marketplaceStore.store_name}</h2><p>{marketplaceStore.seller_name} · {marketplaceStore.business_type} · 📍 {marketplaceStore.location}</p><p>{marketplaceStore.description}</p><small>WhatsApp: {marketplaceStore.whatsapp_number} · {marketplaceStore.delivery_options.join(" / ")}</small></div><div className="marketplace-owner-actions"><button className="button button-outline" type="button" onClick={() => setMarketplaceStoreOpen(true)}>Edit store details</button><button className="button button-outline danger-button" type="button" onClick={() => void handleMarketplaceStoreDelete()} disabled={marketplaceStoreSaving}>Delete store</button></div></section>}
+        {page === "store" && marketplaceStoreOpen && <section className="profile-editor marketplace-listing-editor"><div className="section-heading"><div><span className="eyebrow">SELLER PROFILE</span><h2>{marketplaceStore ? "Manage your store" : "Set up your store"}</h2><p>Save this once. Your store profile stays linked to your account for future visits.</p></div><button className="button button-outline" type="button" onClick={() => setMarketplaceStoreOpen(false)}>Close</button></div><form className="marketplace-form" onSubmit={(event) => void handleMarketplaceStoreSave(event)}>
           <label className="form-field"><span>Your name *</span><input required minLength={2} maxLength={80} value={marketplaceStoreDraft.seller_name} onChange={(event) => setMarketplaceStoreDraft({ ...marketplaceStoreDraft, seller_name: event.target.value })} placeholder="Name customers should know" /></label>
           <label className="form-field"><span>Store / business name *</span><input required minLength={2} maxLength={100} value={marketplaceStoreDraft.store_name} onChange={(event) => setMarketplaceStoreDraft({ ...marketplaceStoreDraft, store_name: event.target.value })} placeholder="e.g. Comrade Tech Shop" /></label>
           <label className="form-field"><span>Business type *</span><select value={marketplaceStoreDraft.business_type} onChange={(event) => setMarketplaceStoreDraft({ ...marketplaceStoreDraft, business_type: event.target.value })}><option>General retail</option><option>Electronics</option><option>Clothing and shoes</option><option>Food and groceries</option><option>Books and stationery</option><option>Beauty and personal care</option><option>Home and furniture</option><option>Student services</option><option>Other</option></select></label>
@@ -682,7 +738,7 @@ function App() {
         </form></section>}
         {marketplaceError && <p className="error-message" role="alert">{marketplaceError}</p>}
         {marketplaceNotice && <p className="success-message" role="status">{marketplaceNotice}</p>}
-        {marketplaceShowForm && <section className="profile-editor marketplace-listing-editor">
+        {page === "store" && marketplaceShowForm && <section className="profile-editor marketplace-listing-editor">
           <div className="section-heading"><div><span className="eyebrow">SELLER DETAILS</span><h2>{marketplaceEditingId ? "Edit listing" : "Create a listing"}</h2><p>Your WhatsApp number will be shown to viewers so they can contact you directly.</p></div><button className="button button-outline" type="button" onClick={() => { setMarketplaceShowForm(false); setMarketplaceEditingId(null); }}>Cancel</button></div>
           <form className="marketplace-form" onSubmit={(event) => void handleMarketplaceSave(event)}>
             <label className="form-field"><span>Store / business name *</span><input value={marketplaceDraft.store_name} onChange={(event) => setMarketplaceDraft({ ...marketplaceDraft, store_name: event.target.value })} required maxLength={100} placeholder="e.g. Comrade Tech Shop" /></label>
@@ -698,15 +754,15 @@ function App() {
             <div className="marketplace-field-wide marketplace-form-actions"><button className="button button-primary" type="submit" disabled={marketplaceSaving || marketplaceUploading}>{marketplaceSaving ? "Saving..." : marketplaceEditingId ? "Save changes" : "Publish listing"}</button><span className="small-note">No checkout or online payment is available. Buyers contact your store directly on WhatsApp.</span></div>
           </form>
         </section>}
-        <div className="marketplace-results-heading"><div><h2>Community listings</h2><p>Contact the seller to ask questions, confirm availability and arrange a safe viewing or collection.</p></div></div>
+        <div className="marketplace-results-heading"><div><h2>{page === "store" ? "My products and services" : "Available community listings"}</h2><p>{page === "store" ? "Edit, hide or remove your own listings here." : "Contact the seller to ask questions, confirm availability and arrange a safe viewing or collection."}</p></div></div>
         {marketplaceLoading ? <p className="form-feedback">Loading marketplace listings...</p> : filteredMarketplaceListings.length === 0 ? (
-          <div className="marketplace-empty-state"><span aria-hidden="true">🛍️</span><h3>{search || category !== "All categories" ? "No matching listings" : "Be the first to list something"}</h3><p>{search || category !== "All categories" ? "Try a different search or category." : "Add an item, service or store listing and include your WhatsApp number so other comrades can contact you."}</p><button className="button button-primary" type="button" onClick={startMarketplaceCreate}>+ Create first listing</button></div>
+          <div className="marketplace-empty-state"><span aria-hidden="true">🛍️</span><h3>{search || category !== "All categories" ? "No matching listings" : page === "store" ? "Your store is ready for its first product" : "No listings available right now"}</h3><p>{search || category !== "All categories" ? "Try a different search or category." : page === "store" ? "Create your store profile and add your first item or service." : "Check back soon, or open My Store if you would like to sell."}</p>{page === "store" && <button className="button button-primary" type="button" onClick={startMarketplaceCreate}>+ Create first listing</button>}</div>
         ) : <div className="marketplace-grid">{filteredMarketplaceListings.map((listing) => {
           const mine = listing.created_by === user?.uid;
           const icon = listing.category === "Books" ? "📚" : listing.category === "Electronics" ? "📱" : listing.category === "Fashion" ? "👟" : listing.category === "Home" ? "🪑" : listing.category === "Food" ? "🍲" : listing.category === "Services" ? "🧰" : "🛍️";
           return <article className="marketplace-card" key={listing.id}>
-            <div className={`marketplace-image${listing.image_urls?.length ? " has-images" : ""}`}>{listing.image_urls?.length ? <div className="marketplace-image-gallery">{listing.image_urls.map((url, index) => <img src={url} key={url} alt={`${listing.title} photo ${index + 1}`} loading="lazy" />)}</div> : <span aria-hidden="true">{icon}</span>}</div>
-            <div className="marketplace-card-body"><span className="marketplace-category">{listing.category}</span><h3>{listing.title}</h3><p className="marketplace-store-name">{listing.store_name} · 📍 {listing.location}</p><strong className="marketplace-price">{listing.price_ksh > 0 ? `KSh ${listing.price_ksh.toLocaleString()}` : "Contact for price"}{listing.price_negotiable && listing.price_ksh > 0 ? " · Negotiable" : ""}</strong><p className="marketplace-description">{listing.description}</p><span className={`marketplace-status marketplace-status-${listing.status}`}>{listing.status === "available" ? "Available" : listing.status === "sold" ? "Sold" : "Hidden from buyers"}</span>{listing.status !== "closed" && <><p className="marketplace-contact-number">WhatsApp: <strong>{listing.whatsapp_number}</strong></p><a className="button button-whatsapp marketplace-whatsapp" href={`https://wa.me/${toWhatsAppNumber(listing.whatsapp_number)}?text=${encodeURIComponent(`Hi, I saw “${listing.title}” from ${listing.store_name} on Chuka Comrades. I would like to order/enquire. Is it available? Price shown: ${listing.price_ksh > 0 ? `KSh ${listing.price_ksh}` : "please confirm price"}. Please confirm stock, delivery or collection options, and how to pay directly.`)}`} target="_blank" rel="noreferrer">Order / enquire on WhatsApp</a></>}{mine && <div className="marketplace-owner-actions"><button className="button button-outline" type="button" onClick={() => startMarketplaceEdit(listing)}>Edit listing</button><button className="button button-outline" type="button" onClick={() => void handleMarketplaceDelete(listing)}>Delete</button></div>}</div>
+            <div className={`marketplace-image${listing.image_urls?.length ? " has-images" : ""}`}>{listing.image_urls?.length ? <div className="marketplace-image-gallery">{listing.image_urls.map((url, index) => <button className="marketplace-image-expand" type="button" key={url} onClick={() => setExpandedImage(url)} aria-label={`View full image ${index + 1} of ${listing.title}`}><img src={url} alt={`${listing.title} photo ${index + 1}`} loading="lazy" /></button>)}</div> : <span aria-hidden="true">{icon}</span>}</div>
+            <div className="marketplace-card-body"><span className="marketplace-category">{listing.category}</span><h3>{listing.title}</h3><p className="marketplace-store-name">{listing.store_name} · 📍 {listing.location}</p><strong className="marketplace-price">{listing.price_ksh > 0 ? `KSh ${listing.price_ksh.toLocaleString()}` : "Contact for price"}{listing.price_negotiable && listing.price_ksh > 0 ? " · Negotiable" : ""}</strong><p className="marketplace-description">{listing.description}</p><span className={`marketplace-status marketplace-status-${listing.status}`}>{listing.status === "available" ? "Available" : listing.status === "sold" ? "Sold" : "Hidden from buyers"}</span>{listing.status !== "closed" && <><p className="marketplace-contact-number">WhatsApp: <strong>{listing.whatsapp_number}</strong></p><a className="button button-whatsapp marketplace-whatsapp" href={`https://wa.me/${toWhatsAppNumber(listing.whatsapp_number)}?text=${encodeURIComponent(`Hi, I saw “${listing.title}” from ${listing.store_name} on Chuka Comrades. I would like to order/enquire. Is it available? Price shown: ${listing.price_ksh > 0 ? `KSh ${listing.price_ksh}` : "please confirm price"}. Please confirm stock, delivery or collection options, and how to pay directly.`)}`} target="_blank" rel="noreferrer">Order / enquire on WhatsApp</a></>}{page === "store" && mine && <div className="marketplace-owner-actions"><button className="button button-outline" type="button" onClick={() => startMarketplaceEdit(listing)}>Edit listing</button><button className="button button-outline" type="button" onClick={() => void handleMarketplaceDelete(listing)}>Delete</button></div>}</div>
           </article>;
         })}</div>}
       </>
@@ -1002,8 +1058,9 @@ function App() {
                 {isAdmin && page === "admin" ? renderAdminDashboard() : (
                   <>
                     {page === "home" && renderHome()}
-                    {page === "marketplace" && renderMarketplace()}
+                    {(page === "marketplace" || page === "store") && renderMarketplace()}
                     {page === "hostels" && <Hostels />}
+                    {page === "requests" && <RequestActivation />}
                     {page === "anonymous" && <AnonymousCommunity />}
                     {page === "premier-league" && <PremierLeague />}
                     {(page === "efootball" || page === "opportunities" || page === "profile") && renderSimplePage()}
@@ -1013,6 +1070,8 @@ function App() {
               </div>
             </>
           )}
+
+          {expandedImage && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Full-size image" onClick={() => setExpandedImage(null)}><button type="button" className="image-lightbox-close" onClick={() => setExpandedImage(null)} aria-label="Close image">×</button><img src={expandedImage} alt="Full-size view" onClick={(event) => event.stopPropagation()} /></div>}
 
           {error && (
             <p className="error-message" role="alert">

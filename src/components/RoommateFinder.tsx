@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { auth } from "../lib/firebase";
+import { getPaidRequestPayments, submitPaidRequestPayment, type PaidRequestPayment } from "../lib/communityApi";
+import PaymentInstructions from "./PaymentInstructions";
 import { getRoommateProfiles, saveRoommateProfile, sendConnectionProposal, respondToConnectionProposal, type ConnectionProposal, type HousingStatus, type RoommateProfile } from "../lib/hostelApi";
 
 type Draft = {
@@ -22,12 +24,18 @@ export default function RoommateFinder() {
   const [notice, setNotice] = useState("");
   const [filter, setFilter] = useState<HousingStatus | "all">("all");
   const [genderFilter, setGenderFilter] = useState("All genders");
+  const [paidRequests, setPaidRequests] = useState<PaidRequestPayment[]>([]);
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [hasOwnProfile, setHasOwnProfile] = useState(false);
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const result = await getRoommateProfiles();
+      const [result, paymentResult] = await Promise.all([getRoommateProfiles(), getPaidRequestPayments()]);
+      setPaidRequests(paymentResult.requests);
       setProfiles(result.profiles);
       setProposals(result.proposals);
+      setHasOwnProfile(!!result.ownProfile);
       if (result.ownProfile) {
         const own = result.ownProfile;
         setDraft({ display_name: own.display_name, course: "", year_of_study: "", gender: own.gender ?? "Prefer not to say",
@@ -54,6 +62,16 @@ export default function RoommateFinder() {
     finally { setSaving(false); }
   }
 
+  async function submitRoommatePayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setPaymentSaving(true); setError(""); setNotice("");
+    try {
+      const payment = await submitPaidRequestPayment({ request_type: "roommate_finder", payment_reference: paymentReference.trim().toUpperCase() });
+      setPaidRequests((current) => [payment, ...current.filter((item) => item.id !== payment.id)]); setPaymentReference("");
+      setNotice("KSh 100 reference submitted. Your roommate request can be published after admin verification.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not submit roommate payment."); }
+    finally { setPaymentSaving(false); }
+  }
+
   async function sendProposal(targetUid: string) {
     const confirmed = window.confirm("SAFETY & PRIVACY FIRST\n\nOnly send a proposal if you genuinely want to connect. Never share your password, M-PESA PIN, ID documents, live location, intimate images, or money with someone you just met. Meet in a public place, tell a trusted person, arrange your own transport, and leave if uncomfortable. Your phone number and extended profile details are shared only after the recipient accepts. Acceptance is not consent to anything beyond sharing contact details.\n\nDo you want to send this connection proposal?");
     if (!confirmed) return;
@@ -75,6 +93,8 @@ export default function RoommateFinder() {
   }
 
   const currentUid = auth.currentUser?.uid ?? "";
+  const roommatePayment = paidRequests.find((item) => item.request_type === "roommate_finder" && item.status === "pending") ?? paidRequests.find((item) => item.request_type === "roommate_finder" && item.status === "approved" && !item.used_at);
+  const roommatePaymentReady = paidRequests.some((item) => item.request_type === "roommate_finder" && item.status === "approved" && !item.used_at);
   const visible = profiles.filter(p => (filter === "all" || p.housing_status === filter) && (genderFilter === "All genders" || p.gender === genderFilter));
   return <section className="roommate-panel">
     <div className="section-heading">
@@ -82,7 +102,11 @@ export default function RoommateFinder() {
     </div>
     {error && <p className="error-message" role="alert">{error}</p>}
     {notice && <p className="success-message" role="status">{notice}</p>}
-    <form className="roommate-form" onSubmit={event => void submit(event)}>
+    <section className="roommate-payment-card"><div><span className="eyebrow">ROOMMATE REQUEST ACTIVATION</span><h3>KSh 100 one-time request fee</h3><p>{hasOwnProfile ? "Your existing roommate profile can be updated without paying again." : roommatePayment?.status === "pending" ? "Your M-Pesa reference is awaiting admin verification." : roommatePaymentReady ? "Payment approved. You can now publish your roommate request." : "Pay and submit your M-Pesa reference. Your request will be publishable after admin verification."}</p>{roommatePayment?.status === "pending" && <span className="status-pill status-pending">Payment under review</span>}{roommatePaymentReady && <span className="status-pill status-active">Payment approved</span>}</div>
+      <PaymentInstructions amount={100} purpose="Roommate finder request" />
+      {!hasOwnProfile && !roommatePaymentReady && roommatePayment?.status !== "pending" && <form className="activation-payment-form" onSubmit={event => void submitRoommatePayment(event)}><label className="form-field"><span>M-Pesa transaction code *</span><input required minLength={4} maxLength={80} value={paymentReference} onChange={event => setPaymentReference(event.target.value.toUpperCase())} placeholder="Enter the M-Pesa code" /></label><button className="button button-primary" disabled={paymentSaving}>{paymentSaving ? "Submitting…" : "Submit KSh 100 payment reference"}</button></form>}
+    </section>
+    {(hasOwnProfile || roommatePaymentReady) && <form className="roommate-form" onSubmit={event => void submit(event)}>
       <label className="form-field"><span>Your name *</span><input value={draft.display_name} onChange={e => setDraft({...draft, display_name:e.target.value})} required minLength={2} maxLength={80} placeholder="Name students know you by" /></label>
       <label className="form-field"><span>Gender *</span><select value={draft.gender} onChange={e => setDraft({...draft, gender:e.target.value as Draft["gender"]})} required><option>Prefer not to say</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label>
       <label className="form-field"><span>Accommodation status *</span><select value={draft.housing_status} onChange={e => setDraft({...draft, housing_status:e.target.value as HousingStatus})}><option value="looking">I have not found a hostel yet</option><option value="have_hostel">I already have a hostel / room</option></select></label>
@@ -93,6 +117,7 @@ export default function RoommateFinder() {
       <label className="form-field roommate-wide"><span>About you / what roommate you need</span><textarea value={draft.bio} onChange={e => setDraft({...draft, bio:e.target.value})} rows={3} maxLength={500} placeholder="Share your preferred move-in date, study habits, or room-sharing plans." /></label>
       <div className="roommate-wide roommate-actions"><button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving profile..." : "Save / update my profile"}</button><span className="small-note">Privacy: your phone number is never shown on public cards. Extended details are shared only after both people agree by accepting a proposal. You can leave any interaction at any time.</span></div>
     </form>
+    }
     <div className="roommate-list-heading"><div><h3>People open to connecting</h3><p>Send a proposal first. No one can see your phone number until they accept.</p></div><div className="roommate-filter-controls"><select aria-label="Filter roommate profiles by accommodation" value={filter} onChange={e => setFilter(e.target.value as HousingStatus | "all")}><option value="all">All profiles</option><option value="looking">Still looking</option><option value="have_hostel">Already have a hostel</option></select><select aria-label="Filter roommate profiles by gender" value={genderFilter} onChange={e => setGenderFilter(e.target.value)}><option>All genders</option><option>Woman</option><option>Man</option><option>Non-binary</option><option>Prefer not to say</option></select></div></div>
     <div className="connection-safety-note"><strong>🛡️ Safety and privacy before connecting</strong><p>Keep phone numbers, hostel details and personal stories private until a proposal is accepted. Meet in public, tell a trusted person, use your own transport, never share PINs/passwords/ID documents or send money to strangers, and report pressure or harassment. An accepted proposal only permits contact sharing; it does not imply consent to a date, sex, or anything else.</p></div>
     {proposals.some(p => p.target_uid === currentUid && p.status === "pending") && <div className="connection-proposals"><h3>Incoming proposals</h3>{proposals.filter(p => p.target_uid === currentUid && p.status === "pending").map(proposal => { const sender = profiles.find(p => p.firebase_uid === proposal.requester_uid); return <div className="connection-proposal-row" key={proposal.id}><span><strong>{sender?.display_name ?? "A student"}</strong> wants to connect. Your contact details stay private until you accept.</span><span className="connection-proposal-actions"><button className="button button-primary" type="button" disabled={busyProposal === proposal.id} onClick={() => void respondProposal(proposal.id, "accepted")}>Accept</button><button className="button button-outline" type="button" disabled={busyProposal === proposal.id} onClick={() => void respondProposal(proposal.id, "declined")}>Decline</button></span></div>; })}</div>}

@@ -143,6 +143,13 @@ Deno.serve(async (request: Request) => {
     }
     let body: Record<string, unknown>;
     try { body = await request.json(); } catch { return respond({ error: "Invalid JSON body." }, 400, origin); }
+    if (body.action === "delete-store") {
+      const { error: listingError } = await supabase.from("marketplace_listings").delete().eq("created_by", identity.uid);
+      if (listingError) return respond({ error: "Could not delete your product listings. No store data was removed." }, 500, origin);
+      const { error: storeError } = await supabase.from("marketplace_stores").delete().eq("created_by", identity.uid);
+      if (storeError) return respond({ error: "Listings were deleted, but the store profile could not be removed." }, 500, origin);
+      return respond({ store: null }, 200, origin);
+    }
     if (body.action !== "save-store" || !body.store || typeof body.store !== "object") return respond({ error: "Store profile data is missing." }, 400, origin);
     const value = body.store as Record<string, unknown>;
     const sellerName = cleanText(value.seller_name, 2, 80);

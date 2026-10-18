@@ -318,6 +318,10 @@ Deno.serve(async (request: Request) => {
       return respond({ error: "Unsupported roommate profile action." }, 400, origin);
     }
     const profile = body.profile as Record<string, unknown>;
+    const { data: existingRoommate } = await supabase.from("roommate_profiles").select("firebase_uid").eq("firebase_uid", identity.uid).maybeSingle();
+    const { data: paidRequest, error: paidRequestError } = await supabase.from("paid_request_payments").select("id").eq("firebase_uid", identity.uid).eq("request_type", "roommate_finder").eq("status", "approved").is("used_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (paidRequestError) return respond({ error: "Roommate payment service is not ready. Apply the paid-request migration and redeploy community-api and hostel-api." }, 500, origin);
+    if (!existingRoommate && !paidRequest) return respond({ error: "Submit the KSh 100 roommate finder fee and wait for admin approval before publishing your request." }, 403, origin);
     const displayName = cleanText(profile.display_name, 2, 80);
     const course = "";
     const year = "";
@@ -343,6 +347,7 @@ Deno.serve(async (request: Request) => {
       console.error("Roommate profile save failed:", error.message);
       return respond({ error: "Could not save your roommate profile. Apply the latest Supabase migration and redeploy hostel-api." }, 500, origin);
     }
+    if (paidRequest) await supabase.from("paid_request_payments").update({ used_at: new Date().toISOString() }).eq("id", paidRequest.id).eq("used_at", null);
     return respond({ roommate: data }, 200, origin);
   }
 

@@ -77,6 +77,9 @@ export function getMarketplaceStore() {
 export function saveMarketplaceStore(store: MarketplaceStoreDraft) {
   return request<MarketplaceStore>("store", "POST", { action: "save-store", store });
 }
+export function deleteMarketplaceStore() {
+  return request<null>("store", "POST", { action: "delete-store" });
+}
 
 export function getMarketplaceListings() {
   return request<MarketplaceListing[]>("listings", "GET");

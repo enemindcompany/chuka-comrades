@@ -11,6 +11,7 @@ import {
   type Opportunity,
   type OpportunityCategory,
 } from "../lib/opportunityApi";
+import PaymentInstructions from "./PaymentInstructions";
 
 const categories: OpportunityCategory[] = [
   "Referral links",
@@ -33,10 +34,6 @@ const blank = {
   deadline: "",
   contact: "",
 };
-
-const mpesaTill = String(import.meta.env.VITE_MPESA_TILL ?? "6817863").trim();
-const mpesaPaybill = String(import.meta.env.VITE_MPESA_PAYBILL ?? "").trim();
-const mpesaAccount = String(import.meta.env.VITE_MPESA_ACCOUNT ?? "").trim();
 
 export default function Opportunities() {
   const [activation, setActivation] = useState<ActivationAccount | null>(null);
@@ -171,22 +168,10 @@ export default function Opportunities() {
           )}
         </div>
 
+        {!hasAccess && <PaymentInstructions amount={100} purpose="Opportunities access" />}
         {!hasAccess && activation?.status !== "pending" && (
           <form className="activation-payment-form" onSubmit={payForAccess}>
             <h3>Pay with M-Pesa</h3>
-
-            {mpesaTill && (
-              <p className="payment-instructions">
-                Buy Goods Till Number: <strong>{mpesaTill}</strong>
-              </p>
-            )}
-
-            {mpesaPaybill && (
-              <p className="payment-instructions">
-                Paybill: <strong>{mpesaPaybill}</strong>
-                {mpesaAccount && <> · Account: <strong>{mpesaAccount}</strong></>}
-              </p>
-            )}
 
             <p className="small-note">
               Pay KSh 100 using the official payment details above, then enter

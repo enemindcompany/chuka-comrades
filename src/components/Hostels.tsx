@@ -103,6 +103,8 @@ export default function Hostels() {
   const [draft, setDraft] = useState<HostelDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [landlordPortalOpen, setLandlordPortalOpen] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [uploadingImages, setUploadingImages] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -250,7 +252,8 @@ export default function Hostels() {
         <span>Use WhatsApp to ask questions and arrange a viewing. Verify the property and landlord in person before sending money; Chuka Comrades does not process or guarantee payments made outside the app.</span>
       </div>
 
-      <section className="hostel-manager-panel">
+      <section className="landlord-portal-entry"><div><span className="eyebrow">LANDLORDS & PROPERTY OWNERS</span><h2>Manage your accommodation</h2><p>Register or sign in to your landlord account to publish and manage your own hostel details. Your management form stays tucked away while students browse available rooms.</p></div><button className="button button-primary" type="button" onClick={() => setLandlordPortalOpen((open) => !open)}>{landlordPortalOpen ? "Close landlord portal" : manager?.status === "approved" ? "Open landlord portal" : "Landlord / List your hostel"}</button></section>
+      {landlordPortalOpen && <section className="hostel-manager-panel">
         {manager && manager.status === "approved" ? (
           <div className="hostel-manager-ready">
             <div>
@@ -293,9 +296,9 @@ export default function Hostels() {
             </form>
           </div>
         )}
-      </section>
+      </section>}
 
-      {showForm && manager && (
+      {landlordPortalOpen && showForm && manager && (
         <section className="hostel-editor">
           <div className="section-heading">
             <div>
@@ -390,7 +393,7 @@ export default function Hostels() {
               const mine = listing.created_by === manager?.firebase_uid;
               return (
                 <article className="hostel-listing-card" key={listing.id}>
-                  {(listing.image_urls?.length ? listing.image_urls : listing.image_url ? [listing.image_url] : []).length > 0 ? <div className="hostel-photo-gallery">{(listing.image_urls?.length ? listing.image_urls : listing.image_url ? [listing.image_url] : []).map((url, index) => <img className="hostel-listing-photo" key={url} src={url} alt={`${listing.name} room photo ${index + 1}`} loading="lazy" />)}</div> : <div className="hostel-listing-photo hostel-photo-placeholder" aria-hidden="true">🏘️</div>}
+                  {(listing.image_urls?.length ? listing.image_urls : listing.image_url ? [listing.image_url] : []).length > 0 ? <div className="hostel-photo-gallery">{(listing.image_urls?.length ? listing.image_urls : listing.image_url ? [listing.image_url] : []).map((url, index) => <button className="hostel-image-expand" type="button" key={url} onClick={() => setExpandedImage(url)} aria-label={`View full-size ${listing.name} photo ${index + 1}`}><img className="hostel-listing-photo" src={url} alt={`${listing.name} room photo ${index + 1}`} loading="lazy" /></button>)}</div> : <div className="hostel-listing-photo hostel-photo-placeholder" aria-hidden="true">🏘️</div>}
                   <div className="hostel-listing-content">
                     <div className="hostel-listing-topline">
                       <span className={`hostel-availability ${listing.listing_status === "available" ? "is-available" : "is-unavailable"}`}>{listing.listing_status === "available" ? "Available" : listing.listing_status === "booked" ? "Booked" : "Closed"}</span>
@@ -403,7 +406,7 @@ export default function Hostels() {
                     {listing.amenities.length > 0 && <div className="hostel-amenities">{listing.amenities.map((amenity) => <span key={amenity}>{amenity}</span>)}</div>}
                     <div className="hostel-contact-row"><span>WhatsApp: <strong>{listing.phone}</strong></span><a className="button button-whatsapp hostel-call-button" href={`https://wa.me/${toWhatsAppNumber(listing.phone)}?text=${encodeURIComponent(`Hi, I found your ${listing.room_type} at ${listing.name} on Chuka Comrades. Is it available for viewing?`)}`} target="_blank" rel="noreferrer">Chat on WhatsApp</a></div>
                     <p className="hostel-manager-credit">Listed by landlord</p>
-                    {mine && <div className="hostel-owner-actions"><button className="button button-outline" type="button" onClick={() => startEdit(listing)}>Edit / availability</button><button className="button button-outline hostel-delete-button" type="button" onClick={() => void handleDelete(listing)}>Delete</button></div>}
+                    {mine && landlordPortalOpen && <div className="hostel-owner-actions"><button className="button button-outline" type="button" onClick={() => startEdit(listing)}>Edit / availability</button><button className="button button-outline hostel-delete-button" type="button" onClick={() => void handleDelete(listing)}>Delete</button></div>}
                   </div>
                 </article>
               );
@@ -412,11 +415,12 @@ export default function Hostels() {
         )}
       </section>
 
-      {manager && <section className="hostel-my-listings">
+      {landlordPortalOpen && manager && <section className="hostel-my-listings">
         <div className="section-heading"><div><span className="eyebrow">YOUR PROPERTIES</span><h2>My rooms ({myListings.length})</h2></div></div>
         <p className="small-note">You can edit your room details and WhatsApp number at any time. Set rooms to Available, Booked, or Closed. Closed rooms are hidden from public browsing but remain editable here. No payments are collected through this marketplace.</p>
         {myListings.length > 0 && <div className="hostel-my-listings-list">{myListings.map((listing) => <div key={listing.id}><span><strong>{listing.name}</strong><small>{listing.area} · KSh {listing.rent_ksh.toLocaleString()}/month</small></span><button className="button button-outline" type="button" onClick={() => startEdit(listing)}>Edit / availability</button></div>)}</div>}
       </section>}
+    {expandedImage && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Full-size hostel photo" onClick={() => setExpandedImage(null)}><button type="button" className="image-lightbox-close" onClick={() => setExpandedImage(null)} aria-label="Close image">×</button><img src={expandedImage} alt="Full-size hostel photo" onClick={(event) => event.stopPropagation()} /></div>}
     </section>
   );
 }

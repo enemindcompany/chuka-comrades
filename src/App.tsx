@@ -159,10 +159,11 @@ function App() {
     void Promise.all([
       getMarketplaceListings().catch(() => [] as MarketplaceListing[]),
       getEfootballData().catch(() => null),
-      getOpportunities().catch(() => []),
-    ]).then(([listings, efootball, opportunities]) => {
+      getOpportunities().catch(() => ({ opportunities: [], has_access: false })),
+    ]).then(([listings, efootball, opportunityResult]) => {
       if (cancelled) return;
       const available = listings.filter((item) => item.status === "available" && !item.admin_suspended);
+      const opportunities = opportunityResult.opportunities;
       const highlights: Record<string, string> = {
         marketplace: available.length ? `${available.length} available listing${available.length === 1 ? "" : "s"} · Latest: ${available[0].title}` : "No current listings yet — the marketplace is ready for the community's first listing.",
         efootball: efootball?.hasAccess ? `${efootball.players.length} registered players · ${efootball.tournaments.length} tournament${efootball.tournaments.length === 1 ? "" : "s"} listed` : "Player listings and tournament details appear here when available to your account.",

@@ -26,3 +26,7 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+# Local backups and temporary files
+sido
+*.backup
+supabase/migrations/*.tmp

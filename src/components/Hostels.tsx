@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import RoommateFinder from "./RoommateFinder";
 import {
   createHostelListing,
   deleteHostelListing,
@@ -103,9 +102,9 @@ export default function Hostels({ mode = "browse" }: { mode?: "browse" | "manage
   const [draft, setDraft] = useState<HostelDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [landlordPortalOpen, setLandlordPortalOpen] = useState(mode === "manage");
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [landlordPortalOpen, setLandlordPortalOpen] = useState(mode === "manage");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -242,6 +241,16 @@ export default function Hostels({ mode = "browse" }: { mode?: "browse" | "manage
         <span className="eyebrow">{mode === "manage" ? "LANDLORD WORKSPACE" : "CHUKA CAMPUS ACCOMMODATION"}</span>
         <h1>{mode === "manage" ? "My Hostel 🏘️" : "Hostels & rooms 🏘️"}</h1>
         <p>{mode === "manage" ? "Register as a landlord, publish rooms and manage your own hostel listings from this private workspace." : "Browse room listings near Chuka University, view details and photos, then contact the landlord directly on WhatsApp. Chuka Comrades does not process online payments."}</p>
+        {mode === "browse" && (
+          <button
+            className="button button-outline"
+            type="button"
+            onClick={() => setLandlordPortalOpen((open) => !open)}
+            aria-expanded={landlordPortalOpen}
+          >
+            {landlordPortalOpen ? "Close My Hostel" : "My Hostel / Landlord portal"}
+          </button>
+        )}
       </div>
 
       {error && <p className="error-message" role="alert">{error}</p>}

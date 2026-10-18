@@ -738,7 +738,7 @@ function App() {
         >
           <img
             className="brand-crest"
-            src="/chuka%20crest.jfif"
+            src={`${import.meta.env.BASE_URL}chuka%20crest.jfif`}
             alt="Chuka University crest"
           />
           <span>Chuka Comrades</span>

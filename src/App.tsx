@@ -102,10 +102,22 @@ const trends = [
 
 const ADMIN_EMAIL = "sidneywafula30@gmail.com";
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+};
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [installPrompt, setInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -154,24 +166,95 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const checkInstalled = () => {
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+      setIsAppInstalled(standalone);
+    };
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setInstallPrompt(null);
+      setShowInstallHelp(false);
+    };
+
+    checkInstalled();
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  async function handleInstallApp() {
+    if (!installPrompt) {
+      setShowInstallHelp(true);
+      return;
+    }
+
+    try {
+      await installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+
+      if (result.outcome === "accepted") {
+        setInstallPrompt(null);
+      }
+    } catch (installError) {
+      console.error("App installation error:", installError);
+      setShowInstallHelp(true);
+    }
+  }
+
+  useEffect(() => {
     if (!user || page !== "home") return;
+
     let cancelled = false;
+
     void Promise.all([
       getMarketplaceListings().catch(() => [] as MarketplaceListing[]),
       getEfootballData().catch(() => null),
-      getOpportunities().catch(() => ({ opportunities: [], has_access: false })),
-    ]).then(([listings, efootball, opportunityResult]) => {
+      getOpportunities().catch(() => ({
+        opportunities: [],
+        has_access: false,
+      })),
+    ]).then(([listings, efootball, opportunityResponse]) => {
       if (cancelled) return;
-      const available = listings.filter((item) => item.status === "available" && !item.admin_suspended);
-      const opportunities = opportunityResult.opportunities;
+
+      const available = listings.filter(
+        (item) => item.status === "available" && !item.admin_suspended,
+      );
+      const opportunityItems = opportunityResponse.opportunities;
+
       const highlights: Record<string, string> = {
-        marketplace: available.length ? `${available.length} available listing${available.length === 1 ? "" : "s"} · Latest: ${available[0].title}` : "No current listings yet — the marketplace is ready for the community's first listing.",
-        efootball: efootball?.hasAccess ? `${efootball.players.length} registered players · ${efootball.tournaments.length} tournament${efootball.tournaments.length === 1 ? "" : "s"} listed` : "Player listings and tournament details appear here when available to your account.",
-        opportunities: opportunities.length ? `${opportunities.length} shared opportunit${opportunities.length === 1 ? "y" : "ies"} · Latest: ${opportunities[0].title}` : "No shared opportunities yet. Be the first to share one.",
+        marketplace: available.length
+          ? `${available.length} available listing${available.length === 1 ? "" : "s"} · Latest: ${available[0].title}`
+          : "No current listings yet — the marketplace is ready for the community's first listing.",
+        efootball: efootball?.hasAccess
+          ? `${efootball.players.length} registered players · ${efootball.tournaments.length} tournament${efootball.tournaments.length === 1 ? "" : "s"} listed`
+          : "Player listings and tournament details appear here when available to your account.",
+        opportunities: opportunityItems.length
+          ? `${opportunityItems.length} shared opportunit${opportunityItems.length === 1 ? "y" : "ies"} · Latest: ${opportunityItems[0].title}`
+          : "No shared opportunities yet. Be the first to share one.",
       };
+
       setTrendHighlights(highlights);
     });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, page]);
 
   useEffect(() => {
@@ -809,6 +892,49 @@ function App() {
               </div>
             ) : (
               <div className="login-hero">
+                <div className="landing-brand">
+                  <img
+                    className="landing-brand-logo"
+                    src={`${import.meta.env.BASE_URL}chuka-crest-512.png`}
+                    alt="Chuka Comrades crest"
+                  />
+                  <h2>CHUKA COMRADES</h2>
+                  <p className="landing-brand-tagline">
+                    Your campus. Your people. Your community.
+                  </p>
+                </div>
+
+                {!isAppInstalled && (
+                  <button
+                    className="button button-primary install-app-button"
+                    type="button"
+                    onClick={handleInstallApp}
+                  >
+                    <span aria-hidden="true">⬇</span> Install App
+                  </button>
+                )}
+
+                {showInstallHelp && !isAppInstalled && (
+                  <div className="install-help" role="status">
+                    <strong>Install Chuka Comrades</strong>
+                    <p>
+                      <strong>Android / Chrome:</strong> Open the browser menu
+                      and select "Install app" or "Add to Home screen".
+                    </p>
+                    <p>
+                      <strong>iPhone / Safari:</strong> Tap Share, then
+                      "Add to Home Screen".
+                    </p>
+                    <button
+                      className="install-help-close"
+                      type="button"
+                      onClick={() => setShowInstallHelp(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+
                 <h1>Everything campus life needs, in one place.</h1>
                 <p>
                   Connect with fellow comrades, discover opportunities,
